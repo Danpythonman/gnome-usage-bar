@@ -4,6 +4,8 @@ for dep in curl jq; do
   command -v "$dep" >/dev/null || { echo "usage-bars: $dep missing"; exit 1; }
 done
 
+fmt() { (( $1 >= 100 )) && echo "1.00" || printf '.%02d' "$1"; }
+
 DIR=${XDG_RUNTIME_DIR:-/tmp}
 CACHE=$DIR/claude-usage.txt
 STAMP=$DIR/claude-usage.stamp
@@ -28,10 +30,10 @@ if [[ ! -f $STAMP || $(( $(date +%s) - $(stat -c %Y "$STAMP") )) -ge 300 ]]; the
           -H "Authorization: Bearer $TOKEN" \
           -H "anthropic-beta: oauth-2025-04-20" |
         jq -er 'select(.five_hour) |
-          def p: if . == null then "–" elif . <= 1 then "\(.*100|floor)%" else "\(floor)%" end;
+          def p: if . == null then "–" else (floor | if . >= 100 then "1.00" elif . < 10 then ".0\(.)" else ".\(.)" end) end;
           "5h \(.five_hour.utilization|p) · 7d \(.seven_day.utilization|p)"') \
     && echo "$out" > "$CACHE"
 fi
 claude=$(cat "$CACHE" 2>/dev/null || echo "Claude ?")
 
-echo "CPU ${cpu}% · RAM ${mem}% · $claude"
+echo "CPU $(fmt "$cpu") · RAM $(fmt "$mem") · $claude"
