@@ -7,8 +7,8 @@ done
 fmt() { (( $1 >= 100 )) && echo "1.00" || printf '.%02d' "$1"; }
 
 DIR=${XDG_RUNTIME_DIR:-/tmp}
-CACHE=$DIR/claude-usage.txt
-STAMP=$DIR/claude-usage.stamp
+CACHE=$DIR/claude-usage.tsv
+STAMP=$DIR/claude-usage-tsv.stamp
 CPUSTATE=$DIR/cpu-prev
 
 # CPU: usage since the previous run
@@ -31,9 +31,23 @@ if [[ ! -f $STAMP || $(( $(date +%s) - $(stat -c %Y "$STAMP") )) -ge 300 ]]; the
           -H "anthropic-beta: oauth-2025-04-20" |
         jq -er 'select(.five_hour) |
           def p: if . == null then "–" else (floor | if . >= 100 then "1.00" elif . < 10 then ".0\(.)" else ".\(.)" end) end;
-          "5h \(.five_hour.utilization|p) · 7d \(.seven_day.utilization|p)"') \
+          def t: if . == null then 0 else .[0:19] + "Z" | fromdateiso8601 end;
+          [(.five_hour | (.utilization|p), (.resets_at|t)), (.seven_day | (.utilization|p), (.resets_at|t))] | @tsv') \
     && echo "$out" > "$CACHE"
 fi
-claude=$(cat "$CACHE" 2>/dev/null || echo "Claude ?")
+
+# time until a reset epoch, e.g. 3d2h / 2h13m / 45m (computed every run, not cached)
+left() {
+  local s=$(( $1 - $(date +%s) ))
+  if (( $1 == 0 || s <= 0 )); then echo "–"
+  elif (( s >= 86400 )); then echo "$((s / 86400))d$((s % 86400 / 3600))h"
+  elif (( s >= 3600 )); then echo "$((s / 3600))h$((s % 3600 / 60))m"
+  else echo "$(( (s + 59) / 60 ))m"; fi
+}
+if read -r u5 r5 u7 r7 < "$CACHE" 2>/dev/null && [[ $r7 ]]; then
+  claude="5h $u5 ($(left "$r5")) · 7d $u7 ($(left "$r7"))"
+else
+  claude="Claude ?"
+fi
 
 echo "CPU $(fmt "$cpu") · RAM $(fmt "$mem") · $claude"
