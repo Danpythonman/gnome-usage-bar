@@ -17,4 +17,4 @@ Point Executor at `~/.local/bin/usage-bars` with a 2–3 s interval.
 ## Notes
 
 Uses an undocumented endpoint (`/api/oauth/usage`) that may change without notice.
-Claude usage is cached and refreshed at most every 5 minutes.
+Claude usage is cached and refreshed at most every 10 minutes (30 after a rate limit).
