@@ -26,9 +26,12 @@ mem=$(awk '/^MemTotal/{t=$2} /^MemAvailable/{a=$2} END{printf "%d", 100*(t-a)/t}
 if [[ ! -f $STAMP || $(( $(date +%s) - $(stat -c %Y "$STAMP") )) -ge 300 ]]; then
   touch "$STAMP"
   TOKEN=$(jq -r '.claudeAiOauth.accessToken' ~/.claude/.credentials.json 2>/dev/null)
-  out=$(curl -s --max-time 10 https://api.anthropic.com/api/oauth/usage \
-          -H "Authorization: Bearer $TOKEN" \
-          -H "anthropic-beta: oauth-2025-04-20" |
+  resp=$(curl -s -w '\n%{http_code}' --max-time 10 https://api.anthropic.com/api/oauth/usage \
+           -H "Authorization: Bearer $TOKEN" \
+           -H "anthropic-beta: oauth-2025-04-20")
+  # rate limited: stamp 25 min into the future, so the next try is in 30 min
+  [[ ${resp##*$'\n'} == 429 ]] && touch -d '+25 minutes' "$STAMP"
+  out=$(printf '%s' "${resp%$'\n'*}" |
         jq -er 'select(.five_hour) |
           def p: if . == null then "–" else (floor | if . >= 100 then "1.00" elif . < 10 then ".0\(.)" else ".\(.)" end) end;
           def t: if . == null then 0 else .[0:19] + "Z" | fromdateiso8601 end;
@@ -44,7 +47,7 @@ left() {
   elif (( s >= 3600 )); then echo "$((s / 3600))h$((s % 3600 / 60))m"
   else echo "$(( (s + 59) / 60 ))m"; fi
 }
-if read -r u5 r5 u7 r7 < "$CACHE" 2>/dev/null && [[ $r7 ]]; then
+if read -r u5 r5 u7 r7 2>/dev/null < "$CACHE" && [[ $r7 ]]; then
   claude="5h $u5 ($(left "$r5")) · 7d $u7 ($(left "$r7"))"
 else
   claude="Claude ?"
