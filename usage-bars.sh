@@ -37,10 +37,20 @@ if [[ ! -f $STAMP || $CREDS -nt $STAMP || $(( $(date +%s) - $(stat -c %Y "$STAMP
     resp=$(curl -s -w '\n%{http_code}' --max-time 10 https://api.anthropic.com/api/oauth/usage \
              -H "Authorization: Bearer $TOKEN" \
              -H "anthropic-beta: oauth-2025-04-20")
+    rc=$?
     code=${resp##*$'\n'}
     case $code in
       200) err= ;;
-      000) err="offline" ;;
+      # no HTTP response (e.g. Wi-Fi still reconnecting after suspend):
+      # backdate the stamp so the next try is in 60s instead of 10 min
+      000)
+        case $rc in
+          6) err="offline (DNS)" ;;
+          7) err="offline (no connection)" ;;
+          28) err="timed out" ;;
+          *) err="curl error $rc" ;;
+        esac
+        touch -d '-540 seconds' "$STAMP" ;;
       401 | 403) err="login expired" ;;
       # rate limited: stamp 20 min into the future, so the next try is in 30 min
       429) err="rate limited"; touch -d '+20 minutes' "$STAMP" ;;
