@@ -28,10 +28,10 @@ mem=$(awk '/^MemTotal/{t=$2} /^MemAvailable/{a=$2} END{printf "%d", 100*(t-a)/t}
 # or right away when the credentials change (e.g. after logging in again)
 if [[ ! -f $STAMP || $CREDS -nt $STAMP || $(( $(date +%s) - $(stat -c %Y "$STAMP") )) -ge 600 ]]; then
   touch "$STAMP"
-  read -r TOKEN exp < <(jq -r '.claudeAiOauth | "\(.accessToken) \(.expiresAt // 0)"' "$CREDS" 2>/dev/null)
+  read -r TOKEN exp < <(jq -r '.claudeAiOauth | "\(.accessToken) \(.expiresAt // "none")"' "$CREDS" 2>/dev/null)
   if [[ -z $TOKEN || $TOKEN == null ]]; then
     err="not logged in"
-  elif (( exp > 0 && exp / 1000 <= $(date +%s) )); then
+  elif [[ $exp != none ]] && (( exp / 1000 <= $(date +%s) )); then
     err="login expired"  # skip the request; it would only fail
   else
     resp=$(curl -s -w '\n%{http_code}' --max-time 10 https://api.anthropic.com/api/oauth/usage \
